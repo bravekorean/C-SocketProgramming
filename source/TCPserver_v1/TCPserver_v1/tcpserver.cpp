@@ -54,25 +54,15 @@ void ClientThread(int clientIndex) {
     clients[clientIndex] = INVALID_SOCKET;
 }
 
-void AssignNickname(SOCKET clientSocket, int clientIndex) {
-    std::string nicknameMsg = "Please enter your nickname: ";
-    send(clientSocket, nicknameMsg.c_str(), nicknameMsg.length() + 1, 0);
-
-    char nicknameBuffer[BUFFER_SIZE];
-    memset(nicknameBuffer, 0, BUFFER_SIZE);
-    int nicknameReceived = recv(clientSocket, nicknameBuffer, BUFFER_SIZE, 0);
-    if (nicknameReceived <= 0) {
-        std::cerr << "Failed to receive client's nickname. Closing connection." << std::endl;
-        closesocket(clientSocket);
-        return;
-    }
-    std::string nickname = nicknameBuffer;
+void AssignNickname(int clientIndex) {
+    // 닉네임을 서버에서 지정
+    std::string nickname = "사용자" + std::to_string(clientIndex);
 
     // Assign the nickname to the client
     clientNames[clientIndex] = nickname;
 
     std::string assignedMsg = "Your nickname has been set as: " + nickname + "\n";
-    send(clientSocket, assignedMsg.c_str(), assignedMsg.length() + 1, 0);
+    send(clients[clientIndex], assignedMsg.c_str(), assignedMsg.length() + 1, 0);
 }
 
 // 서버에서 클라이언트로 발신
@@ -99,8 +89,6 @@ void ServerInputThread() {
     exit(0);
 }
 
-
-
 int main() {
     // 윈속 초기화
     WSADATA wsData;
@@ -122,7 +110,7 @@ int main() {
     hint.sin_family = AF_INET;
     hint.sin_port = htons(9000); // 포트번호 설정 
     hint.sin_addr.s_addr = htonl(INADDR_ANY);
- 
+
     if (bind(listeningSocket, (sockaddr*)&hint, sizeof(hint)) == SOCKET_ERROR) {
         std::cerr << "Failed to bind the listening socket." << std::endl;
         closesocket(listeningSocket);
@@ -140,7 +128,7 @@ int main() {
 
     std::cout << "Server started. Waiting for connections..." << std::endl;
 
-    // 서버 입력에 대한 스레드를 생성 (다중 스레드를 이용하기위함)
+    // 서버 입력에 대한 스레드를 생성 (다중 스레드를 이용하기 위함)
     std::thread inputThread(ServerInputThread);
     inputThread.detach();
 
@@ -162,21 +150,23 @@ int main() {
             continue;
         }
 
-        // 클라이언트의 닉네임을 할당한다.
-        AssignNickname(clientSocket, numClients);
+        // 클라이언트의 작업을 처리할 스레드를 생성하기 전에 클라이언트의 닉네임을 할당한다.
+        AssignNickname(numClients);
 
-    
+        // 클라이언트의 소켓을 배열에 저장
+        clients[numClients] = clientSocket;
 
         // 클라이언트의 작업을 처리할 스레드를 생성한다.
-        std::thread clientThread(ClientThread, numClients - 1);
+        std::thread clientThread(ClientThread, numClients);
         clientThread.detach();
 
-        std::cout << "Client connected. Client index: " << numClients - 1 << std::endl;
+        std::cout << "Client connected. Client index: " << numClients << std::endl;
+
+        numClients++;
     }
 
     // 소켓 닫음
     closesocket(listeningSocket);
-    // Cleanup();
     WSACleanup();
     return 0;
 }

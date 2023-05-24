@@ -63,7 +63,7 @@ int main() {
         std::cerr << "Failed to receive server's entrance message." << std::endl;
     }
     else {
-        std::cout << "Server: " << buffer << std::endl;
+        std::cout << "" << buffer << std::endl;
     }
 
     // Receive and display the assigned nickname from the server
@@ -73,7 +73,7 @@ int main() {
         std::cerr << "Failed to receive nickname from the server." << std::endl;
     }
     else {
-        std::cout << "Assigned Nickname: " << buffer << std::endl;
+        std::cout << "" << buffer << std::endl;
     }
 
     std::string message;
@@ -86,7 +86,7 @@ int main() {
         std::getline(std::cin, message);
 
         // Send message to the server
-        int bytesSent = send(clientSocket, message.c_str(), message.length() + 1, 0);
+        int bytesSent = send(clientSocket, message.c_str(), message.length(), 0);
         if (bytesSent == SOCKET_ERROR) {
             std::cerr << "Failed to send message to the server." << std::endl;
             break;
