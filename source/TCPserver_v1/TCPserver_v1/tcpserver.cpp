@@ -9,6 +9,7 @@
 #define BUFFER_SIZE 1024
 
 SOCKET clients[MAX_CLIENTS];
+std::string clientNames[MAX_CLIENTS];
 int numClients = 0;
 SOCKET listeningSocket; // listeningSocket을 전역 변수로 선언
 
@@ -27,7 +28,7 @@ void ClientThread(int clientIndex) {
     while (true) {
         memset(buffer, 0, BUFFER_SIZE);
 
-        // Receive client message
+        // 클라이언트 메세지 수신
         int bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE, 0);
         if (bytesReceived == SOCKET_ERROR) {
             std::cerr << "Error in recv(). Quitting thread..." << std::endl;
@@ -35,24 +36,24 @@ void ClientThread(int clientIndex) {
         }
 
         if (bytesReceived == 0) {
-            // Client disconnected
+            // 클라이언트 연결해제 
             std::cout << "Client disconnected. Quitting thread..." << std::endl;
             break;
         }
 
-        // Process the received message
-        std::string message = "Client " + std::to_string(clientIndex) + ": " + buffer;
+        // 클라이언트로부터 온 메세지 처리
+        std::string message = clientNames[clientIndex] + ": " + buffer;
         std::cout << message << std::endl;
 
-        // Broadcast the message to other clients
+        // 다른 클라이언트에 메세지를 전파합니다.(브로드캐스트 방식)
         BroadcastMessage(message, clientIndex);
     }
 
-    // Close the client socket and remove it from the clients array
+    // 클라이언트의 소켓을 닫고 클라이언트 배열에서 제거
     closesocket(clientSocket);
     clients[clientIndex] = INVALID_SOCKET;
 }
-
+// 서버에서 클라이언트로 발신
 void ServerInputThread() {
     std::string input;
     while (true) {
@@ -61,15 +62,15 @@ void ServerInputThread() {
             break;
         }
 
-        // Process server message
+        // 서버 메세지 처리
         std::string message = "Server: " + input;
         std::cout << message << std::endl;
 
-        // Broadcast the message to all clients
+        // 모든 클라이언트에 메세지 수신 
         BroadcastMessage(message, -1);
     }
 
-    // Cleanup
+    // 작업 정리
     closesocket(listeningSocket);
     WSACleanup();
     std::cout << "Server shutting down..." << std::endl;
@@ -77,14 +78,14 @@ void ServerInputThread() {
 }
 
 int main() {
-    // Initialize Winsock
+    // 윈속 초기화
     WSADATA wsData;
     if (WSAStartup(MAKEWORD(2, 2), &wsData) != 0) {
         std::cerr << "Failed to initialize Winsock." << std::endl;
         return 1;
     }
 
-    // Create a listening socket
+    // 수신 소켓 만들기 
     listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (listeningSocket == INVALID_SOCKET) {
         std::cerr << "Failed to create listening socket." << std::endl;
@@ -92,11 +93,11 @@ int main() {
         return 1;
     }
 
-    // Bind the socket to an IP address and port
+    // 소켓에 IP주소와 포트번호를 bind()
     sockaddr_in hint;
     hint.sin_family = AF_INET;
-    hint.sin_port = htons(9000); // Choose your desired port number
-    hint.sin_addr.s_addr = INADDR_ANY;
+    hint.sin_port = htons(23); // 포트번호 설정 
+    hint.sin_addr.s_addr = htonl(INADDR_ANY);
  
     if (bind(listeningSocket, (sockaddr*)&hint, sizeof(hint)) == SOCKET_ERROR) {
         std::cerr << "Failed to bind the listening socket." << std::endl;
@@ -105,7 +106,7 @@ int main() {
         return 1;
     }
 
-    // Start listening for client connections
+    // 클라이언트 연결 수신 시작 
     if (listen(listeningSocket, SOMAXCONN) == SOCKET_ERROR) {
         std::cerr << "Failed to listen on the socket." << std::endl;
         closesocket(listeningSocket);
@@ -115,13 +116,13 @@ int main() {
 
     std::cout << "Server started. Waiting for connections..." << std::endl;
 
-    // Create a thread for server input
+    // 서버 입력에 대한 스레드를 생성 (다중 스레드를 이용하기위함)
     std::thread inputThread(ServerInputThread);
     inputThread.detach();
 
-    // Accept client connections and create client threads
+    // 클라이언트 연결을 수락하고 클라이언트 스레드 생성
     while (true) {
-        // Wait for a client to connect
+        // 클라이언트가 연결될 때까지 대기
         sockaddr_in clientAddr;
         int clientAddrSize = sizeof(clientAddr);
         SOCKET clientSocket = accept(listeningSocket, (sockaddr*)&clientAddr, &clientAddrSize);
@@ -130,36 +131,51 @@ int main() {
             continue;
         }
 
-        // Check if the maximum number of clients is reached
+        // 최대 클라이언트수는 10개로 10개가 되거나 이상이 되면 소켓을 닫는다. 
         if (numClients >= MAX_CLIENTS) {
             std::cerr << "Maximum number of clients reached. Rejecting new connection." << std::endl;
             closesocket(clientSocket);
             continue;
         }
 
-        // Add the client socket to the array
+        // 클라이언트의 닉네임 요청 및 저장
+        std::string nicknameMsg = "Please enter your nickname: ";
+        send(clientSocket, nicknameMsg.c_str(), nicknameMsg.length() + 1, 0);
+
+        char nicknameBuffer[BUFFER_SIZE];
+        memset(nicknameBuffer, 0, BUFFER_SIZE);
+        int nicknameReceived = recv(clientSocket, nicknameBuffer, BUFFER_SIZE, 0);
+        if (nicknameReceived <= 0) {
+            std::cerr << "Failed to receive client's nickname. Closing connection." << std::endl;
+            closesocket(clientSocket);
+            continue;
+        }
+        std::string nickname = nicknameBuffer;
+
+        // 다중 클라이언트를 위해 소켓을 어레이에 담는다
         if (numClients < MAX_CLIENTS) {
             clients[numClients] = clientSocket;
+            clientNames[numClients] = nickname;
             numClients++;
 
-            // Create a thread to handle the client
+            // 클라이언트의 작업을 처리할 스레드를 생성한다.
             std::thread clientThread(ClientThread, numClients - 1);
             clientThread.detach();
 
-            // Send a welcome message to the client
-            std::string welcomeMsg = "Welcome to the chat server, Client " + std::to_string(numClients - 1) + "!\n";
+            // 클라이언트 접속시 환영 메세지 출력
+            std::string welcomeMsg = nickname +"님이 입장하셨습니다." + "!\n";
             send(clientSocket, welcomeMsg.c_str(), welcomeMsg.length() + 1, 0);
 
             std::cout << "Client connected. Client index: " << numClients - 1 << std::endl;
         }
         else {
-            // Maximum number of clients reached
+            // 최대 클라이언트 수에 도달했을 때 더이상 연결할 수 없다고 메세지 출력
             std::cerr << "Maximum number of clients reached. Rejecting new connection." << std::endl;
             closesocket(clientSocket);
         }
     }
 
-    // Cleanup
+    // 소켓 닫음
     closesocket(listeningSocket);
     WSACleanup();
     return 0;
