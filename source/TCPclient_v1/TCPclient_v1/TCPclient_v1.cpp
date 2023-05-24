@@ -66,6 +66,16 @@ int main() {
         std::cout << "Server: " << buffer << std::endl;
     }
 
+    // Receive and display the assigned nickname from the server
+    memset(buffer, 0, BUFFER_SIZE);
+    bytesReceived = recv(clientSocket, buffer, BUFFER_SIZE - 1, 0);
+    if (bytesReceived == SOCKET_ERROR) {
+        std::cerr << "Failed to receive nickname from the server." << std::endl;
+    }
+    else {
+        std::cout << "Assigned Nickname: " << buffer << std::endl;
+    }
+
     std::string message;
 
     // Create a thread for receiving messages

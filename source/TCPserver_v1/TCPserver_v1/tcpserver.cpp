@@ -5,7 +5,7 @@
 #include <thread>
 #pragma comment(lib, "ws2_32.lib")
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 #define BUFFER_SIZE 1024
 
 SOCKET clients[MAX_CLIENTS];
@@ -53,6 +53,28 @@ void ClientThread(int clientIndex) {
     closesocket(clientSocket);
     clients[clientIndex] = INVALID_SOCKET;
 }
+
+void AssignNickname(SOCKET clientSocket, int clientIndex) {
+    std::string nicknameMsg = "Please enter your nickname: ";
+    send(clientSocket, nicknameMsg.c_str(), nicknameMsg.length() + 1, 0);
+
+    char nicknameBuffer[BUFFER_SIZE];
+    memset(nicknameBuffer, 0, BUFFER_SIZE);
+    int nicknameReceived = recv(clientSocket, nicknameBuffer, BUFFER_SIZE, 0);
+    if (nicknameReceived <= 0) {
+        std::cerr << "Failed to receive client's nickname. Closing connection." << std::endl;
+        closesocket(clientSocket);
+        return;
+    }
+    std::string nickname = nicknameBuffer;
+
+    // Assign the nickname to the client
+    clientNames[clientIndex] = nickname;
+
+    std::string assignedMsg = "Your nickname has been set as: " + nickname + "\n";
+    send(clientSocket, assignedMsg.c_str(), assignedMsg.length() + 1, 0);
+}
+
 // 서버에서 클라이언트로 발신
 void ServerInputThread() {
     std::string input;
@@ -77,6 +99,8 @@ void ServerInputThread() {
     exit(0);
 }
 
+
+
 int main() {
     // 윈속 초기화
     WSADATA wsData;
@@ -96,7 +120,7 @@ int main() {
     // 소켓에 IP주소와 포트번호를 bind()
     sockaddr_in hint;
     hint.sin_family = AF_INET;
-    hint.sin_port = htons(23); // 포트번호 설정 
+    hint.sin_port = htons(9000); // 포트번호 설정 
     hint.sin_addr.s_addr = htonl(INADDR_ANY);
  
     if (bind(listeningSocket, (sockaddr*)&hint, sizeof(hint)) == SOCKET_ERROR) {
@@ -131,52 +155,28 @@ int main() {
             continue;
         }
 
-        // 최대 클라이언트수는 10개로 10개가 되거나 이상이 되면 소켓을 닫는다. 
+        // 최대 클라이언트수는 100개로 100개가 되거나 이상이 되면 소켓을 닫는다. 
         if (numClients >= MAX_CLIENTS) {
             std::cerr << "Maximum number of clients reached. Rejecting new connection." << std::endl;
             closesocket(clientSocket);
             continue;
         }
 
-        // 클라이언트의 닉네임 요청 및 저장
-        std::string nicknameMsg = "Please enter your nickname: ";
-        send(clientSocket, nicknameMsg.c_str(), nicknameMsg.length() + 1, 0);
+        // 클라이언트의 닉네임을 할당한다.
+        AssignNickname(clientSocket, numClients);
 
-        char nicknameBuffer[BUFFER_SIZE];
-        memset(nicknameBuffer, 0, BUFFER_SIZE);
-        int nicknameReceived = recv(clientSocket, nicknameBuffer, BUFFER_SIZE, 0);
-        if (nicknameReceived <= 0) {
-            std::cerr << "Failed to receive client's nickname. Closing connection." << std::endl;
-            closesocket(clientSocket);
-            continue;
-        }
-        std::string nickname = nicknameBuffer;
+    
 
-        // 다중 클라이언트를 위해 소켓을 어레이에 담는다
-        if (numClients < MAX_CLIENTS) {
-            clients[numClients] = clientSocket;
-            clientNames[numClients] = nickname;
-            numClients++;
+        // 클라이언트의 작업을 처리할 스레드를 생성한다.
+        std::thread clientThread(ClientThread, numClients - 1);
+        clientThread.detach();
 
-            // 클라이언트의 작업을 처리할 스레드를 생성한다.
-            std::thread clientThread(ClientThread, numClients - 1);
-            clientThread.detach();
-
-            // 클라이언트 접속시 환영 메세지 출력
-            std::string welcomeMsg = nickname +"님이 입장하셨습니다." + "!\n";
-            send(clientSocket, welcomeMsg.c_str(), welcomeMsg.length() + 1, 0);
-
-            std::cout << "Client connected. Client index: " << numClients - 1 << std::endl;
-        }
-        else {
-            // 최대 클라이언트 수에 도달했을 때 더이상 연결할 수 없다고 메세지 출력
-            std::cerr << "Maximum number of clients reached. Rejecting new connection." << std::endl;
-            closesocket(clientSocket);
-        }
+        std::cout << "Client connected. Client index: " << numClients - 1 << std::endl;
     }
 
     // 소켓 닫음
     closesocket(listeningSocket);
+    // Cleanup();
     WSACleanup();
     return 0;
 }
