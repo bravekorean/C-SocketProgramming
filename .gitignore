@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/source/ChattingServer
+/source/WeatheUtopia
+/source/WeatherProject
+/source/구
+/source/TCP_2.zip
+/source/TCP_Project.zip
